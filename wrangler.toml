@@ -4,5 +4,3 @@ compatibility_date = "2023-01-21"
 
 
 [vars]
-ALLOWED_DOMAINS = ''
-CLOUDFLARE_TOKEN = ''

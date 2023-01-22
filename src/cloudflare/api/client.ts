@@ -17,46 +17,45 @@ export class Client {
 		this.token = options.token;
 	}
 
-	async request(requestMethod: string, requestPath: string, data?: any, opts?: { auth?: Cloudflare.AuthObject, contentType?: string }): Promise<Response> {
+	async request(method: string, requestPath: string, data?: any, opts?: { auth?: Cloudflare.AuthObject, contentType?: string }): Promise<Response> {
 		let uri = `https://api.cloudflare.com/client/v4/${requestPath}`;
 		const key = opts?.auth?.key || this.key;
 		const token = opts?.auth?.token || this.token;
 		const email = opts?.auth?.email || this.email;
 
-		const options = {
-			body: undefined as any,
-			method: requestMethod,
-			headers: new Headers({
-				//'user-agent': `cloudflare/${pkg.version} node/${process.versions.node}`,
-				'Content-Type': opts?.contentType || 'application/json',
-				Accept: 'application/json',
-			}),
-		};
+		const headers: Record<string, string> = {
+			//'user-agent': `cloudflare/${pkg.version} node/${process.versions.node}`,
+			'Content-Type': opts?.contentType || 'application/json',
+			Accept: 'application/json',
+		}
 
 		if (isUserServiceKey(key)) {
-			options.headers.set('X-Auth-User-Service-Key', key!);
+			headers['X-Auth-User-Service-Key'] = key!
 		} else if (key) {
-			options.headers.set('X-Auth-Key', key);
-			options.headers.set('X-Auth-Email', email!);
+			headers['X-Auth-Key'] = key
+			headers['X-Auth-Email'] = email!
 		} else if (token) {
-			options.headers.set('Authorization', `Bearer ${token}`);
+			headers['Authorization'] = `Bearer ${token}`
 		}
 
-		if (requestMethod === 'GET') {
-			const query = new URLSearchParams(data)
-			uri = `${uri}?${query.toString()}`
+		let body = undefined;
+
+		if (method === 'GET') {
+			if (data) {
+				const query = new URLSearchParams(data)
+				uri = `${uri}?${query.toString()}`
+			}
 		} else {
-			options.body = data;
+			if (data && (isPlainObject(data) || Array.isArray(data))) {
+				body = JSON.stringify(data);
+			}
 		}
 
-		if (
-			options.body &&
-			(isPlainObject(options.body) || Array.isArray(options.body))
-		) {
-			options.body = JSON.stringify(options.body);
-		}
-
-		return fetch(uri, options);
+		return fetch(uri, {
+			body,
+			method,
+			headers,
+		});
 	}
 }
 

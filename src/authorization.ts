@@ -11,7 +11,8 @@ export type BasicAuthorizationCredentials = {
  */
 export async function verifyCredentials(credentials: BasicAuthorizationCredentials, verifyFn: (credentials: BasicAuthorizationCredentials) => Promise<boolean>) {
 	if (!(await verifyFn(credentials))) {
-		throw new UnauthorizedException('Invalid credentials.');
+		console.info(`Invalid credentials for ${credentials.user}`)
+		throw new UnauthorizedException('Invalid credentials');
 	}
 }
 
@@ -61,8 +62,10 @@ export function basicAuthentication(request: Request, realm?: string): BasicAuth
 		}; */
 	}
 
+	console.info(`Authorization header missing`)
+
 	// Not authenticated.
-	throw new UnauthorizedException('', {
+	throw new UnauthorizedException('Unauthorized', {
 		status: 401,
 		headers: {
 			// Prompts the user for credentials.

@@ -1,15 +1,15 @@
 import { Router } from 'itty-router';
 import { basicAuthentication, verifyCredentials } from './authorization';
-import { NotFoundException, UnauthorizedException } from './exception';
+import { ForbiddenException, NotFoundException, UnauthorizedException, MethodNotAllowedException } from './exception';
 import handler from './handler';
 import { checkDomain, getIncoming } from './incoming';
 
 export interface Env {
 	/** Comma-separated domains */
-	ALLOWED_DOMAINS: string
+	//ALLOWED_DOMAINS?: string
 
 	/** Comma-separated IP addresses */
-	ALLOWED_IPS?: string;
+	//ALLOWED_IPS?: string;
 
 	/** Comma-separated username/password address pairs in the format username:password */
 	BASIC_AUTH?: string;
@@ -19,7 +19,7 @@ export interface Env {
 
 const router = Router()
 router.all('/present', (request, env: Env, context) => actionHandler('present', { request: request as unknown as Request, env, context }))
-router.post('/cleanup', (request, env: Env, context) => actionHandler('cleanup', { request: request as unknown as Request, env, context }))
+router.all('/cleanup', (request, env: Env, context) => actionHandler('cleanup', { request: request as unknown as Request, env, context }))
 
 // Catch-all
 router.all('*', () => { throw new NotFoundException() })
@@ -36,49 +36,76 @@ async function actionHandler(action: 'present' | 'cleanup', { request, env, cont
 	}
 
 	if (request.method !== 'POST') {
-		return jsonResponse(null, { status: 405 })
+		throw new MethodNotAllowedException()
 	}
 
-	// The "Authorization" header is sent when authenticated.
-	if (request.headers.has('Authorization')) {
-		// Throws exception when authorization fails.
-		await verifyCredentials(basicAuthentication(request), async (credentials) => {
-			// todo
-			return false
-		});
-	}
+	let zone = ''
+	let domainAuthorized = false;
+
+	const basicAuth = JSON.parse(env.BASIC_AUTH ?? '[]') as {
+		host: string,
+		zone: string,
+		user: string,
+		pass: string,
+	}[]
 
 	// Get the incoming message, mode, and domain to check
 	const incoming = await getIncoming(request)
 
-	await checkDomain(env.ALLOWED_DOMAINS.split(','), incoming.checkDomain)
+	// The "Authorization" header is sent when authenticated.
+	if (basicAuth.length && request.headers.has('Authorization')) {
+		// Throws exception when authorization fails.
+		await verifyCredentials(basicAuthentication(request), async (credentials) => {
+			let match = basicAuth.find(({ host, zone, user, pass }) => (`${host}.${zone}` === incoming.checkDomain && user === credentials.user && pass === credentials.pass))
+
+			if (match) {
+				zone = match.zone
+				return true
+			}
+
+			return false
+		});
+
+		domainAuthorized = true;
+	}
+
+	// If the domain was not authorized using Basic auth, check IP address and authorized domains
+	// if (!domainAuthorized && env.ALLOWED_DOMAINS) {
+	// 	const allowedIPs = (env.ALLOWED_IPS || '').split(',')
+	// 	if (allowedIPs.length > 0) {
+	// 		if (!request.headers.has('CF-Connecting-IP')) {
+	// 			throw new ForbiddenException('Unauthorized')
+	// 		}
+
+	// 		const ip = request.headers.get('CF-Connecting-IP')!
+	// 		if (!allowedIPs.includes(ip)) {
+	// 			throw new ForbiddenException('Unauthorized')
+	// 		}
+	// 	}
+	// 	domainAuthorized = await checkDomain(env.ALLOWED_DOMAINS.split(','), incoming.checkDomain)
+	// }
+
+	if (!domainAuthorized) {
+		throw new ForbiddenException('Domain not permitted')
+	}
 
 	switch (action) {
 		case 'present':
-			await handler.present(request, env, incoming)
+			await handler.present(request, env, incoming, zone)
 			console.info(`Successfully created TXT record`)
+			break;
 		case 'cleanup':
-			await handler.cleanup(request, env, incoming)
+			await handler.cleanup(request, env, incoming, zone)
 			console.info(`Successfully removed TXT record`)
-	}
-}
-
-function jsonResponse(body?: any | null, init?: ResponseInit) {
-	if (body !== null) {
-		body = JSON.stringify(body)
-	}
-	if (!init) {
-		init = {}
-	}
-	if (!init.headers) {
-		init.headers = {}
-	}
-	init.headers = {
-		'Content-Type': 'application/json',
-		...init.headers
+			break;
 	}
 
-	return new Response(body, init)
+	return new Response(JSON.stringify(incoming), {
+		status: action == 'present' ? 201 : 200,
+		headers: {
+			'Content-Type': 'application/json',
+		}
+	})
 }
 
 export default {

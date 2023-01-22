@@ -17,12 +17,16 @@ export default class Provider {
 	async set({ challenge }: { challenge: Challenge }) {
 		const { zone, fullRecordName } = await this.getZone(challenge)
 
-		await this.client.dnsRecords.add(zone.id, {
+		const response = await this.client.dnsRecords.add(zone.id, {
 			type: 'TXT',
 			name: fullRecordName,
 			content: challenge.dnsAuthorization,
 			ttl: 120,
 		});
+
+		if (!response.success) {
+			throw new Error(response.errors.join(' '))
+		}
 	}
 
 	async remove({ challenge }: { challenge: Challenge }) {
@@ -45,7 +49,10 @@ export default class Provider {
 		}
 		for (const record of records) {
 			if (record.name === fullRecordName && record.content === challenge.dnsAuthorization) {
-				await this.client.dnsRecords.del(zone.id, record.id);
+				const response = await this.client.dnsRecords.del(zone.id, record.id);
+				if (!response.success) {
+					throw new Error(response.errors.join(' '))
+				}
 			}
 		}
 	}

@@ -51,7 +51,6 @@ export async function getIncoming(request: Request): Promise<Incoming> {
 		message.fqdn = toFQDN(message.fqdn)
 
 		const checkDomain = unFQDN(message.fqdn.replace(/^_acme-challenge\./, ''))
-		console.debug('Received JSON payload (default mode)', { fqdn: message.fqdn, value: message.value })
 
 		return { mode: Mode.Default, checkDomain, message }
 	}
@@ -67,7 +66,6 @@ export async function getIncoming(request: Request): Promise<Incoming> {
 		message.domain = unFQDN(message.domain)
 
 		const checkDomain = message.domain
-		console.debug('Received JSON payload (raw mode)', { domain: message.domain, token: message.token, keyAuth: message.keyauth })
 
 		return { mode: Mode.Raw, checkDomain, message }
 	}
@@ -76,21 +74,17 @@ export async function getIncoming(request: Request): Promise<Incoming> {
 }
 
 // Check if we are allowed to request certificates for this domain
-export async function checkDomain(allowed: string[], domain: string): Promise<void> {
+export async function checkDomain(allowed: string[], domain: string): Promise<boolean> {
 	for (const allowedDomain of allowed) {
-		console.debug('Checking allowed domain', { domain, allowedDomain })
 		if (
 			// check apex
-			domain === allowedDomain ||
+			domain === allowedDomain //||
 			// remove subdomains and check
-			domain.split('.', 2)[1].endsWith(allowedDomain)
+			//domain.split('.', 2)[1].endsWith(allowedDomain)
 		) {
-			return
+			return true
 		}
 	}
 
-	if (!allowed) {
-		console.debug("Requested domain not in allowed-domains", { domain, allowed })
-		throw new ForbiddenException('Domain not permitted')
-	}
+	return false
 }

@@ -57,3 +57,16 @@ export class NotFoundException extends Error implements HTTPException {
 		this.reason = reason;
 	}
 }
+
+export class MethodNotAllowedException extends Error implements HTTPException {
+	status: number;
+	statusText: string;
+	reason?: string;
+
+	constructor(reason?: string) {
+		super()
+		this.status = 405;
+		this.statusText = 'Method Not Allowed';
+		this.reason = reason;
+	}
+}
